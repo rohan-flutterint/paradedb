@@ -18,14 +18,22 @@ use super::directory::ParadeDirectory;
 use super::session::Session;
 use super::table::PgTableProvider;
 
+const TIME_ZONE: &str = "datafusion.execution.time_zone";
+
 pub struct QueryContext {
     options: ConfigOptions,
 }
 
 impl QueryContext {
     pub fn new() -> Result<Self, CatalogError> {
+        let mut config_options = ConfigOptions::new();
+
+        config_options.set(TIME_ZONE, unsafe {
+            CStr::from_ptr(pg_sys::pg_get_timezone_name(pg_sys::session_timezone)).to_str()?
+        })?;
+
         Ok(Self {
-            options: ConfigOptions::new(),
+            options: config_options,
         })
     }
 

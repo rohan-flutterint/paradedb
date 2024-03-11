@@ -208,6 +208,37 @@ where
     }
 }
 
+pub trait IntoTimestampTzMicrosecondArray
+where
+    Self: Iterator<Item = (pg_sys::Datum, bool)> + Sized,
+{
+    fn into_ts_tz_micro_array(self) -> Result<Vec<Option<i64>>, DataTypeError> {
+        let array = self
+            .map(|(datum, is_null)| {
+                (!is_null).then_some(datum).and_then(|datum| {
+                    unsafe { datum::TimestampWithTimeZone::from_datum(datum, false) }
+                        .and_then(|timestamp| MicrosecondUnix::try_from(timestamp.to_utc()).ok())
+                        .map(|MicrosecondUnix(unix)| unix)
+                })
+            })
+            .collect::<Vec<Option<i64>>>();
+
+        Ok(array)
+    }
+}
+
+pub trait IntoTimestampTzMicrosecondArrowArray
+where
+    Self: Iterator<Item = (pg_sys::Datum, bool)> + Sized,
+{
+    fn into_ts_tz_micro_arrow_array(self) -> Result<ArrayRef, DataTypeError> {
+        Ok(Arc::new(
+            TimestampMicrosecondArray::from_iter(self.into_ts_tz_micro_array()?)
+                .with_timezone("UTC"),
+        ))
+    }
+}
+
 pub trait IntoTimeNanosecondArray
 where
     Self: Iterator<Item = Option<pg_sys::Datum>> + Sized,
@@ -390,6 +421,11 @@ where
                     PgTimestampPrecision::Microsecond => self.into_ts_micro_arrow_array(),
                     PgTimestampPrecision::Millisecond => self.into_ts_milli_arrow_array(),
                 },
+                TIMESTAMPTZOID => match PgTimestampPrecision::try_from(typemod)? {
+                    PgTimestampPrecision::Default => self.into_ts_tz_micro_arrow_array(),
+                    PgTimestampPrecision::Microsecond => self.into_ts_tz_micro_arrow_array(),
+                    _ => todo!(),
+                },
                 TIMEOID => match PgTimestampPrecision::try_from(typemod)? {
                     PgTimestampPrecision::Default => self.into_time_nano_arrow_array(),
                     PgTimestampPrecision::Microsecond => self.into_time_nano_arrow_array(),
@@ -420,6 +456,7 @@ impl<T: Iterator<Item = Option<pg_sys::Datum>>> IntoPrimitiveArrowArray for T {}
 impl<T: Iterator<Item = Option<pg_sys::Datum>>> IntoTimestampMicrosecondArrowArray for T {}
 impl<T: Iterator<Item = Option<pg_sys::Datum>>> IntoTimestampMillisecondArrowArray for T {}
 impl<T: Iterator<Item = Option<pg_sys::Datum>>> IntoTimestampSecondArrowArray for T {}
+impl<T: Iterator<Item = Option<pg_sys::Datum>>> IntoTimestampTzMicrosecondArrowArray for T {}
 impl<T: Iterator<Item = Option<pg_sys::Datum>>> IntoTimeNanosecondArrowArray for T {}
 impl<T: Iterator<Item = Option<pg_sys::Datum>>> IntoTimeMillisecondArrowArray for T {}
 
