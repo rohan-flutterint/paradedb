@@ -238,6 +238,7 @@ where
     }
 }
 
+<<<<<<< HEAD
 #[allow(dead_code)]
 pub trait IntoTimeMillisecondArray
 where
@@ -247,6 +248,16 @@ where
         let array = self
             .map(|datum| {
                 datum.and_then(|datum| {
+=======
+pub trait IntoTimeMillisecondArray
+where
+    Self: Iterator<Item = (pg_sys::Datum, bool)> + Sized,
+{
+    fn into_time_milli_array(self) -> Result<Vec<Option<i32>>, DataTypeError> {
+        let array = self
+            .map(|(datum, is_null)| {
+                (!is_null).then_some(datum).and_then(|datum| {
+>>>>>>> 708c4326 (Time types work)
                     unsafe { datum::Time::from_datum(datum, false) }
                         .and_then(|time| NanosecondDay::try_from(time).ok())
                         .map(|NanosecondDay(nanos)| (nanos / 1_000_000) as i32)
@@ -258,10 +269,16 @@ where
     }
 }
 
+<<<<<<< HEAD
 #[allow(dead_code)]
 pub trait IntoTimeMillisecondArrowArray
 where
     Self: Iterator<Item = Option<pg_sys::Datum>> + Sized,
+=======
+pub trait IntoTimeMillisecondArrowArray
+where
+    Self: Iterator<Item = (pg_sys::Datum, bool)> + Sized,
+>>>>>>> 708c4326 (Time types work)
 {
     fn into_time_milli_arrow_array(self) -> Result<ArrayRef, DataTypeError> {
         Ok(Arc::new(Time32MillisecondArray::from_iter(
