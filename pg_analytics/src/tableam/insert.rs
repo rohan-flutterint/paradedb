@@ -27,7 +27,7 @@ pub extern "C" fn deltalake_tuple_insert(
     _bistate: *mut pg_sys::BulkInsertStateData,
 ) {
     let mut mut_slot = slot;
-    task::block_on(insert_tuples(rel, &mut mut_slot, 1)).unwrap_or_else(|err| {
+    insert_tuples(rel, &mut mut_slot, 1).unwrap_or_else(|err| {
         panic!("{}", err);
     });
 }
@@ -41,7 +41,7 @@ pub extern "C" fn deltalake_multi_insert(
     _options: c_int,
     _bistate: *mut pg_sys::BulkInsertStateData,
 ) {
-    task::block_on(insert_tuples(rel, slots, nslots as usize)).unwrap_or_else(|err| {
+    insert_tuples(rel, slots, nslots as usize).unwrap_or_else(|err| {
         panic!("{}", err);
     });
 }
@@ -66,34 +66,42 @@ pub extern "C" fn deltalake_tuple_insert_speculative(
 }
 
 #[inline]
-async fn insert_tuples(
+fn insert_tuples(
     rel: pg_sys::Relation,
     slots: *mut *mut pg_sys::TupleTableSlot,
     nslots: usize,
 ) -> Result<(), ParadeError> {
-    let pg_relation = unsafe { PgRelation::from_pg(rel) };
-    let tuple_desc = pg_relation.tuple_desc();
-    let mut column_values: Vec<ArrayRef> = vec![];
+    unsafe {
+        PgMemoryContexts::CurrentMemoryContext.switch_to(|_| {
+            let pg_relation = PgRelation::from_pg(rel);
+            let tuple_desc = pg_relation.tuple_desc();
+            let mut column_values: Vec<ArrayRef> = vec![];
 
-    // Convert the TupleTableSlots into DataFusion arrays
-    for (col_idx, attr) in tuple_desc.iter().enumerate() {
-        column_values.push(
-            (0..nslots)
-                .map(move |row_idx| unsafe {
-                    let tuple_table_slot = *slots.add(row_idx);
-                    let datum = (*tuple_table_slot).tts_values.add(col_idx);
-                    let is_null = (*tuple_table_slot).tts_isnull.add(col_idx);
-                    (*datum, *is_null)
-                })
-                .into_arrow_array(attr.type_oid(), PgTypeMod(attr.type_mod()))?,
-        );
+            // Convert the TupleTableSlots into DataFusion arrays
+            for (col_idx, attr) in tuple_desc.iter().enumerate() {
+                column_values.push(
+                    (0..nslots)
+                        .map(move |row_idx| {
+                            let tuple_table_slot = *slots.add(row_idx);
+                            let datum = (*tuple_table_slot).tts_values.add(col_idx);
+                            let is_null = (*tuple_table_slot).tts_isnull.add(col_idx);
+                            (*datum, *is_null)
+                        })
+                        .into_arrow_array(attr.type_oid(), PgTypeMod(attr.type_mod()))?,
+                );
+            }
+
+            let schema_name = pg_relation.namespace();
+            let table_path = pg_relation.table_path()?;
+            let arrow_schema = pg_relation.arrow_schema()?;
+            let batch = RecordBatch::try_new(arrow_schema.clone(), column_values)?;
+
+            task::block_on(Writer::write(
+                schema_name,
+                &table_path,
+                arrow_schema,
+                &batch,
+            ))
+        })
     }
-
-    let pg_relation = unsafe { PgRelation::from_pg(rel) };
-    let schema_name = pg_relation.namespace();
-    let table_path = pg_relation.table_path()?;
-    let arrow_schema = pg_relation.arrow_schema()?;
-    let batch = RecordBatch::try_new(arrow_schema.clone(), column_values)?;
-
-    Writer::write(schema_name, &table_path, arrow_schema, &batch).await
 }
