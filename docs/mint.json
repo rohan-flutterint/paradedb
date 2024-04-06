@@ -74,11 +74,20 @@
       "group": "Documentation",
       "pages": [
         "introduction",
-        "import",
         {
           "group": "Deployment",
-          "pages": ["deploy/aws", "deploy/gcp", "deploy/helm"]
+          "pages": [
+            "deploy/extension",
+            {
+              "group": "Docker",
+              "pages": ["deploy/docker/bitnami", "deploy/docker/aws", "deploy/docker/gcp"]
+            },
+            "deploy/kubernetes",
+            "deploy/cloud",
+            "deploy/replication"
+          ]          
         },
+        "import",
         "upgrading",
         "support"
       ]
