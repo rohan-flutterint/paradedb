@@ -232,6 +232,6 @@ fn insert_with_fkey(mut conn: PgConnection) {
     "#
     .execute(&mut conn);
 
-    // let count: (i64,) = "SELECT COUNT(*) FROM users".fetch_one(&mut conn);
-    // assert_eq!(count, (4,));
+    let count: (i64,) = "SELECT COUNT(*) FROM users".fetch_one(&mut conn);
+    assert_eq!(count, (4,));
 }
