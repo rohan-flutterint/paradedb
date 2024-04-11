@@ -231,4 +231,7 @@ fn insert_with_fkey(mut conn: PgConnection) {
         INSERT INTO orders (user_id, order_total) VALUES (1, 100.00), (2, 200.00);
     "#
     .execute(&mut conn);
+
+    // let count: (i64,) = "SELECT COUNT(*) FROM users".fetch_one(&mut conn);
+    // assert_eq!(count, (4,));
 }
