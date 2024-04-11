@@ -204,3 +204,31 @@ fn federated_insert(mut conn: PgConnection) {
     let count: (i64,) = "SELECT COUNT(*) FROM v".fetch_one(&mut conn);
     assert_eq!(count, (2,));
 }
+
+#[rstest]
+fn insert_with_fkey(mut conn: PgConnection) {
+    r#"
+        CREATE TABLE users (
+            user_id SERIAL PRIMARY KEY,
+            username VARCHAR(255) NOT NULL,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) USING parquet;
+        
+        CREATE TABLE orders (
+            order_id SERIAL PRIMARY KEY,
+            user_id INT NOT NULL,
+            order_total DECIMAL(10, 2) NOT NULL,
+            order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        ) USING parquet;
+    "#
+    .execute(&mut conn);
+
+    r#"                        
+        INSERT INTO users (username, email) 
+        VALUES ('User1', 'user1@gmail.com'), ('User2', 'user2@gmail.com'), ('User3', 'user3@gmail.com'), ('User4', 'user4@gmail.com');
+        INSERT INTO orders (user_id, order_total) VALUES (1, 100.00), (2, 200.00);
+    "#
+    .execute(&mut conn);
+}
